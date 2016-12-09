@@ -2,6 +2,8 @@ const http = require('choo/http')
 const qs = require('query-string')
 const parallel = require('run-parallel')
 const Cookies = require('js-cookie')
+const GitHub = require('github-api')
+const assoc = require('ramda/src/assoc')
 
 const config = {
   GITHUB_AUTH_URL: 'https://github.com/login/oauth/authorize',
@@ -11,10 +13,23 @@ const config = {
 
 module.exports = {
   state: {
-    token: ''
+    token: '',
+    user: {},
+    repos: [],
+    currentRepo: {
+      items: [] // files and folders
+    }
   },
   reducers: {
-    receiveToken: (token, state) => ({ token })
+    receiveToken: (token, state) => ({ token }),
+    receiveRepos: (repos, state) => {
+      const reposNoUrls = removeUrlProps(repos)
+      return { repos: reposNoUrls }
+    },
+    receiveRepoItems: (items, state) => {
+      const newCurrentRepo = assoc('items', items, state.currentRepo)
+      return { currentRepo: newCurrentRepo }
+    }
   },
   effects: {
     login: (data, state, send, done) => {
@@ -41,6 +56,21 @@ module.exports = {
     persistToken: (token, state, send, done) => {
       Cookies.set('token', token)
       done()
+    },
+    fetchRepos: (data, state, send, done) => {
+      const user = new GitHub({ token: state.token }).getUser()
+      user.listRepos((err, result) => {
+        if (err) return done(new Error('Failed to fetch list of repos'))
+        send('receiveRepos', result, done)
+      })
+    },
+    fetchRepoItems: (data, state, send, done) => { // files and folders
+      const { repoOwner, repoName } = data
+      const repo = new GitHub({ token: state.token }).getRepo(repoOwner, repoName)
+      repo.getContents(null, null, null, (err, result) => {
+        if (err) return done(new Error('Failed to fetch repository items'))
+        send('receiveRepoItems', result, done)
+      })
     }
   },
   subscriptions: {
@@ -57,3 +87,16 @@ module.exports = {
     }
   }
 }
+
+function removeUrlProps (rows) {
+  return rows.map((row) => {
+    const newRow = {}
+    for (let key in row) {
+      if (key.substr(-3) !== 'url') {
+        newRow[key] = row[key]
+      }
+    }
+    return newRow
+  })
+}
+
