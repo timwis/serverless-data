@@ -1,6 +1,10 @@
 @import url('../node_modules/bulma/css/bulma.css');
 @import url('../node_modules/font-awesome/css/font-awesome.css');
 
+.breadcrumbs .crumb a {
+  color: #363636;
+}
+
 .breadcrumbs .crumb + .crumb:before {
   content: "/";
 }
