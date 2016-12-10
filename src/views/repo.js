@@ -22,28 +22,35 @@ module.exports = (state, prev, send) => {
   return html`
     <div class="container">
       <nav class="panel">
-        <p class="panel-heading">
-          <a href="/">${repoOwner}</a> /
-          <a href="/${repoOwner}/${repoName}">
-            ${repoName}
-          </a>
+        <p class="panel-heading breadcrumbs">
+          <span class="crumb"><a href="/">${repoOwner}</a></span>
+
+          <span class="crumb">
+            <a href="/${repoOwner}/${repoName}">
+              ${repoName}
+            </a>
+          </span>
 
           ${pathItems.map((item, index) => {
             const itemPath = pathItems.slice(0, index + 1).join('/')
             return html`
-              <a href="/${repoOwner}/${repoName}?path=${itemPath}">
-                ${item}
-              </a>
+              <span class="crumb">
+                <a href="/${repoOwner}/${repoName}?path=${itemPath}">
+                  ${item}
+                </a>
+              </span>
             `
           })}
         </p>
         ${directories.map((item) => html`
-          <a href="/${repoOwner}/${repoName}?path=${item.path}" class="panel-block">
-            <span class="panel-icon">
-              <i class="fa fa-folder"></i>
-            </span>
-            ${item.name}
-          </a>
+          <span class="crumb">
+            <a href="/${repoOwner}/${repoName}?path=${item.path}" class="panel-block">
+              <span class="panel-icon">
+                <i class="fa fa-folder"></i>
+              </span>
+              ${item.name}
+            </a>
+          </span>
         `)}
         ${files.map((item) => html`
           <a href="/${repoOwner}/${repoName}/edit?path=${item.path}" class="panel-block">
