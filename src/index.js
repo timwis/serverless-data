@@ -14,7 +14,7 @@ app.model(require('./model'))
 
 app.router((route) => [
   route('/', Layout(HomeView)),
-  route('/repos/:repoOwner/:repoName', Layout(RepoView))
+  route('/:repoOwner/:repoName', Layout(RepoView))
 ])
 
 const tree = app.start()

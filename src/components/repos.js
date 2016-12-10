@@ -7,7 +7,10 @@ module.exports = (repos) => {
         Repositories
       </p>
       ${repos.map((repo) => html`
-        <a href="/repos/${repo.owner.login}/${repo.name}" class="panel-block">
+        <a href="/${repo.owner.login}/${repo.name}" class="panel-block">
+          <span class="panel-icon">
+            <i class="fa fa-book"></i>
+          </span>
           ${repo.name}
         </a>
       `)}

@@ -65,9 +65,9 @@ module.exports = {
       })
     },
     fetchRepoItems: (data, state, send, done) => { // files and folders
-      const { repoOwner, repoName } = data
+      const { repoOwner, repoName, path } = data
       const repo = new GitHub({ token: state.token }).getRepo(repoOwner, repoName)
-      repo.getContents(null, null, null, (err, result) => {
+      repo.getContents(null, path, null, (err, result) => {
         if (err) return done(new Error('Failed to fetch repository items'))
         send('receiveRepoItems', result, done)
       })
