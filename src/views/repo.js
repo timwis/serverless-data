@@ -43,14 +43,12 @@ module.exports = (state, prev, send) => {
           })}
         </p>
         ${directories.map((item) => html`
-          <span class="crumb">
-            <a href="/${repoOwner}/${repoName}?path=${item.path}" class="panel-block">
-              <span class="panel-icon">
-                <i class="fa fa-folder"></i>
-              </span>
-              ${item.name}
-            </a>
-          </span>
+          <a href="/${repoOwner}/${repoName}?path=${item.path}" class="panel-block">
+            <span class="panel-icon">
+              <i class="fa fa-folder"></i>
+            </span>
+            ${item.name}
+          </a>
         `)}
         ${files.map((item) => html`
           <a href="/${repoOwner}/${repoName}/edit?path=${item.path}" class="panel-block">

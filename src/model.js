@@ -1,6 +1,7 @@
 const http = require('choo/http')
 const qs = require('query-string')
 const parallel = require('run-parallel')
+const series = require('run-series')
 const Cookies = require('js-cookie')
 const GitHub = require('github-api')
 const assoc = require('ramda/src/assoc')
@@ -29,7 +30,8 @@ module.exports = {
     receiveRepoItems: (items, state) => {
       const newCurrentRepo = assoc('items', items, state.currentRepo)
       return { currentRepo: newCurrentRepo }
-    }
+    },
+    receiveUser: (user, state) => ({ user })
   },
   effects: {
     login: (data, state, send, done) => {
@@ -71,6 +73,13 @@ module.exports = {
         if (err) return done(new Error('Failed to fetch repository items'))
         send('receiveRepoItems', result, done)
       })
+    },
+    fetchUser: (data, state, send, done) => {
+      const user = new GitHub({ token: state.token }).getUser()
+      user.getProfile((err, result) => {
+        if (err) return done(new Error('Failed to fetch user profile'))
+        send('receiveUser', result, done)
+      })
     }
   },
   subscriptions: {
@@ -78,12 +87,20 @@ module.exports = {
       const authCodeMatch = window.location.href.match(/\?code=([a-z0-9]*)/)
       if (authCodeMatch) {
         const authCode = authCodeMatch[1]
-        send('fetchToken', authCode, done)
+        series([
+          (cb) => send('fetchToken', authCode, cb),
+          (cb) => send('fetchUser', cb)
+        ], done)
       }
     },
     checkCookie: (send, done) => {
       const token = Cookies.get('token')
-      if (token) send('receiveToken', token, done)
+      if (token) {
+        series([
+          (cb) => send('receiveToken', token, cb),
+          (cb) => send('fetchUser', cb)
+        ], done)
+      }
     }
   }
 }
