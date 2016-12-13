@@ -1,5 +1,4 @@
 const html = require('choo/html')
-const qs = require('query-string')
 
 const Breadcrumbs = require('../components/breadcrumbs')
 
@@ -10,50 +9,26 @@ module.exports = (state, prev, send) => {
   const prevRepoOwner = prev && prev.location.params.repoOwner
   const prevRepoName = prev && prev.location.params.repoName
 
-
   if (repoOwner !== prevRepoOwner ||
       repoName !== prevRepoName ||
       path !== prevPath) {
     const payload = { repoOwner, repoName, path }
-    send('fetchRepoItems', payload)
+    send('fetchFile', payload)
   }
 
   const crumbs = constructCrumbs(repoOwner, repoName, path)
-  const repoItems = state.currentRepo.items
-  const directories = repoItems.filter((item) => item.type === 'dir')
-  const files = repoItems.filter((item) => item.type === 'file')
-
+  const contents = state.currentFile.contents
 
   return html`
     <div class="container">
       <nav class="panel">
-        <p class="panel-heading breadcrumbs">
-          ${Breadcrumbs(crumbs)}
-        </p>
-        ${directories.map((item) => html`
-          <a href="/${repoOwner}/${repoName}?path=${item.path}" class="panel-block">
-            <span class="panel-icon">
-              <i class="fa fa-folder"></i>
-            </span>
-            ${item.name}
-          </a>
-        `)}
-        ${files.map((item) => html`
-          <a href="/${repoOwner}/${repoName}/edit?path=${item.path}" class="panel-block">
-            <span class="panel-icon">
-              <i class="fa fa-file-text-o"></i>
-            </span>
-            ${item.name}
-          </a>
-        `)}
+       <p class="panel-heading breadcrumbs">
+         ${Breadcrumbs(crumbs)}
+       </p>
       </nav>
+      ${contents ? JSON.stringify(contents, null, 2) : ''}
     </div>
   `
-}
-
-function getQuery (fullPath) {
-  const queryString = fullPath.substr(fullPath.indexOf('?') + 1)
-  return qs.parse(queryString)
 }
 
 function constructCrumbs (repoOwner, repoName, path) {

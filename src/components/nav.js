@@ -11,11 +11,13 @@ module.exports = (user, loginCb) => {
 
       <div class="nav-right nav-menu">
         <span class="nav-item">
-          ${user.login ? html`<span>${user.login}</span>` : html`
-            <a class="button" onclick=${onClickLogin}>
-              Login
-            </a>
-          `}
+          ${user.login
+            ? html`<span>${user.login}</span>`
+            : html`
+              <a class="button" onclick=${onClickLogin}>
+                Login
+              </a>
+            `}
         </span>
       </div>
     </nav>

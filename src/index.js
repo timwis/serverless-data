@@ -3,6 +3,7 @@ const choo = require('choo')
 const Layout = require('./views/layout')
 const HomeView = require('./views/home')
 const RepoView = require('./views/repo')
+const EditView = require('./views/edit')
 
 const app = choo()
 
@@ -12,9 +13,10 @@ if (process.env.NODE_ENV !== 'production') {
 
 app.model(require('./model'))
 
-app.router((route) => [
-  route('/', Layout(HomeView)),
-  route('/:repoOwner/:repoName', Layout(RepoView))
+app.router([
+  ['/', Layout(HomeView)],
+  ['/:repoOwner/:repoName', Layout(RepoView)],
+  ['/:repoOwner/:repoName/edit', Layout(EditView)]
 ])
 
 const tree = app.start()

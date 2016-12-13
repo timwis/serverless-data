@@ -1,4 +1,4 @@
-const http = require('choo/http')
+const xhr = require('xhr')
 const qs = require('query-string')
 const parallel = require('run-parallel')
 const series = require('run-series')
@@ -19,22 +19,33 @@ module.exports = {
     repos: [],
     currentRepo: {
       items: [] // files and folders
+    },
+    currentFile: {
+      contents: {}
     }
   },
   reducers: {
-    receiveToken: (token, state) => ({ token }),
-    receiveRepos: (repos, state) => {
+    receiveToken: (state, token) => ({ token }),
+    receiveRepos: (state, repos) => {
       const reposNoUrls = removeUrlProps(repos)
       return { repos: reposNoUrls }
     },
-    receiveRepoItems: (items, state) => {
+    receiveRepoItems: (state, items) => {
       const newCurrentRepo = assoc('items', items, state.currentRepo)
       return { currentRepo: newCurrentRepo }
     },
-    receiveUser: (user, state) => ({ user })
+    resetRepoItems: (state, data) => {
+      const newCurrentRepo = assoc('items', [], state.currentRepo)
+      return { currentRepo: newCurrentRepo }
+    },
+    receiveUser: (state, user) => ({ user }),
+    receiveFile: (state, contents) => {
+      const newCurrentFile = assoc('contents', contents, state.currentFile)
+      return { currentFile: newCurrentFile }
+    }
   },
   effects: {
-    login: (data, state, send, done) => {
+    login: (state, data, send, done) => {
       const params = {
         client_id: config.GITHUB_CLIENT,
         redirect_url: window.location.href,
@@ -43,10 +54,10 @@ module.exports = {
       const url = config.GITHUB_AUTH_URL + '?' + qs.stringify(params)
       window.location.href = url
     },
-    fetchToken: (authCode, state, send, done) => {
+    fetchToken: (state, authCode, send, done) => {
       const authURL = `${config.GATEKEEPER_HOST}/authenticate/${authCode}`
 
-      http(authURL, { json: true }, (err, res, body) => {
+      xhr(authURL, { json: true }, (err, res, body) => {
         if (err || res.statusCode !== 200) return done(new Error('Failed to retrieve token'))
         window.history.pushState({}, null, '/') // remove code from URL
         parallel([
@@ -55,30 +66,41 @@ module.exports = {
         ], done)
       })
     },
-    persistToken: (token, state, send, done) => {
+    persistToken: (state, token, send, done) => {
       Cookies.set('token', token)
       done()
     },
-    fetchRepos: (data, state, send, done) => {
+    fetchRepos: (state, data, send, done) => {
       const user = new GitHub({ token: state.token }).getUser()
       user.listRepos((err, result) => {
         if (err) return done(new Error('Failed to fetch list of repos'))
         send('receiveRepos', result, done)
       })
     },
-    fetchRepoItems: (data, state, send, done) => { // files and folders
-      const { repoOwner, repoName, path } = data
-      const repo = new GitHub({ token: state.token }).getRepo(repoOwner, repoName)
-      repo.getContents(null, path, null, (err, result) => {
-        if (err) return done(new Error('Failed to fetch repository items'))
-        send('receiveRepoItems', result, done)
+    fetchRepoItems: (state, data, send, done) => { // files and folders
+      send('resetRepoItems', () => {
+        const { repoOwner, repoName, path } = data
+        const repo = new GitHub({ token: state.token }).getRepo(repoOwner, repoName)
+        repo.getContents(null, path, null, (err, result) => {
+          if (err) return done(new Error('Failed to fetch repository items'))
+          send('receiveRepoItems', result, done)
+        })
       })
     },
-    fetchUser: (data, state, send, done) => {
+    fetchUser: (state, data, send, done) => {
       const user = new GitHub({ token: state.token }).getUser()
       user.getProfile((err, result) => {
         if (err) return done(new Error('Failed to fetch user profile'))
         send('receiveUser', result, done)
+      })
+    },
+    fetchFile: (state, data, send, done) => {
+      const { repoOwner, repoName, path } = data
+      const repo = new GitHub({ token: state.token }).getRepo(repoOwner, repoName)
+      repo.getContents(null, path, true, (err, result) => {
+        if (err) return done(new Error('Failed to fetch file contents'))
+        console.log(result)
+        send('receiveFile', result, done)
       })
     }
   },
