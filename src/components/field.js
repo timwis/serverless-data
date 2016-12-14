@@ -6,11 +6,20 @@ module.exports = (field) => {
     // case paragraph, option, etc.
     default:
       return html`
-        <div class="form-group">
-          <label for=${slug}>${field.name}</label>
-          <input type="${field.field_type}" name=${slug} id=${slug} class="form-control" ${field.required ? 'required' : ''} />
-          ${field.description ? html`<p class="help-block">${field.description}</p>` : ''}
-        </div>
+        <p class="control">
+          <label for=${slug} class="label">
+            ${field.label || field.name}
+          </label>
+          <input
+            type="${field.field_type}"
+            name=${slug}
+            id=${slug}
+            class="input"
+            value=${field.value}
+            ${field.required ? 'required' : ''} 
+          />
+          ${field.description ? html`<p class="help">${field.description}</p>` : ''}
+        </p>
       `
   }
 }

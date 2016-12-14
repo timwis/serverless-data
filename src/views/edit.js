@@ -1,6 +1,9 @@
 const html = require('choo/html')
+const assoc = require('ramda/src/assoc')
+const getFormData = require('get-form-data')
 
 const Breadcrumbs = require('../components/breadcrumbs')
+const Field = require('../components/field')
 
 module.exports = (state, prev, send) => {
   const path = state.location.search.path
@@ -8,12 +11,17 @@ module.exports = (state, prev, send) => {
   const { repoOwner, repoName } = state.location.params
   const prevRepoOwner = prev && prev.location.params.repoOwner
   const prevRepoName = prev && prev.location.params.repoName
+  const dir = getDir(path)
+  const schema = state.schemas[dir]
 
-  if (repoOwner !== prevRepoOwner ||
-      repoName !== prevRepoName ||
-      path !== prevPath) {
+  if (hasRepoOrPathChanged()) {
     const payload = { repoOwner, repoName, path }
     send('fetchFile', payload)
+
+    if (!schema) {
+      const payload = { repoOwner, repoName, path: dir }
+      send('fetchSchema', payload)
+    }
   }
 
   const crumbs = constructCrumbs(repoOwner, repoName, path)
@@ -26,9 +34,42 @@ module.exports = (state, prev, send) => {
          ${Breadcrumbs(crumbs)}
        </p>
       </nav>
-      ${contents ? JSON.stringify(contents, null, 2) : ''}
+      ${schema ? Form(schema, contents, submitCb) : ''}
     </div>
   `
+
+  function hasRepoOrPathChanged () {
+    return (repoOwner !== prevRepoOwner ||
+            repoName !== prevRepoName ||
+            path !== prevPath)
+  }
+
+  function submitCb (formData) {
+    const payload = { repoOwner, repoName, path, formData }
+    send('writeFile', payload)
+  }
+}
+
+function Form (fields, data, submitCb) {
+  return html`
+    <form onsubmit=${onSubmit}>
+      ${fields.map((field) => {
+        const value = data[field.name]
+        const fieldWithData = assoc('value', value, field)
+        return Field(fieldWithData)
+      })}
+      <p class="control">
+        <button type="submit" class="button is-primary">Submit</button>
+      </p>
+    </form>
+  `
+  function onSubmit (e) {
+    if (submitCb) {
+      const formData = getFormData(e.target)
+      submitCb(formData)
+    }
+    e.preventDefault()
+  }
 }
 
 function constructCrumbs (repoOwner, repoName, path) {
@@ -51,4 +92,13 @@ function constructCrumbs (repoOwner, repoName, path) {
   }
 
   return crumbs
+}
+
+function getDir (path) {
+  const lastSlashIndex = path.lastIndexOf('/')
+  if (lastSlashIndex === -1) {
+    return '' // root dir
+  } else {
+    return path.substr(0, lastSlashIndex)
+  }
 }

@@ -5,6 +5,8 @@ const series = require('run-series')
 const Cookies = require('js-cookie')
 const GitHub = require('github-api')
 const assoc = require('ramda/src/assoc')
+const pathjoin = require('path').join
+const yaml = require('js-yaml')
 
 const config = {
   GITHUB_AUTH_URL: 'https://github.com/login/oauth/authorize',
@@ -22,7 +24,8 @@ module.exports = {
     },
     currentFile: {
       contents: {}
-    }
+    },
+    schemas: {} // keyed by path
   },
   reducers: {
     receiveToken: (state, token) => ({ token }),
@@ -42,6 +45,15 @@ module.exports = {
     receiveFile: (state, contents) => {
       const newCurrentFile = assoc('contents', contents, state.currentFile)
       return { currentFile: newCurrentFile }
+    },
+    resetFile: (state, data) => {
+      const newCurrentFile = assoc('contents', {}, state.currentFile)
+      return { currentFile: newCurrentFile }
+    },
+    receiveSchema: (state, data) => {
+      const { path, schema } = data
+      const newSchemas = assoc(path, schema, state.schemas)
+      return { schemas: newSchemas }
     }
   },
   effects: {
@@ -95,13 +107,45 @@ module.exports = {
       })
     },
     fetchFile: (state, data, send, done) => {
-      const { repoOwner, repoName, path } = data
-      const repo = new GitHub({ token: state.token }).getRepo(repoOwner, repoName)
-      repo.getContents(null, path, true, (err, result) => {
-        if (err) return done(new Error('Failed to fetch file contents'))
-        console.log(result)
-        send('receiveFile', result, done)
+      send('resetFile', () => {
+        const { repoOwner, repoName, path } = data
+        const repo = new GitHub({ token: state.token }).getRepo(repoOwner, repoName)
+        repo.getContents(null, path, true, (err, result) => {
+          if (err) return done(new Error('Failed to fetch file contents'))
+          send('receiveFile', result, done)
+        })
       })
+    },
+    fetchSchema: (state, data, send, done) => {
+      const { repoOwner, repoName, path } = data
+      const schemaPath = pathjoin(path, '_schema.yml')
+      const repo = new GitHub({ token: state.token }).getRepo(repoOwner, repoName)
+      repo.getContents(null, schemaPath, true, (err, result) => {
+        if (err) return done(new Error(`Failed to fetch schema file at ${path}`))
+        try {
+          const schema = yaml.safeLoad(result)
+          const payload = { path, schema }
+          send('receiveSchema', payload, done)
+        } catch (e) {
+          return done(new Error(`Error parsing schema file`))
+        }
+      })
+    },
+    writeFile: (state, data, send, done) => {
+      const { repoOwner, repoName, path, formData } = data
+      const repo = new GitHub({ token: state.token }).getRepo(repoOwner, repoName)
+      const fileName = path.split('/').pop()
+      const commitMsg = `Updated ${fileName}`
+      const branch = 'master'
+      try {
+        const content = JSON.stringify(formData, null, 2)
+        repo.writeFile(branch, path, content, commitMsg, (err, result) => {
+          if (err) return done(new Error(`Failed to write to file`))
+          console.log(result)
+        })
+      } catch (e) {
+        return done(new Error(`Failed to serialize form data`))
+      }
     }
   },
   subscriptions: {
