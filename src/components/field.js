@@ -2,8 +2,30 @@ const html = require('choo/html')
 
 module.exports = (field) => {
   const slug = slugify(field.name)
-  switch (field.field_type) {
-    // case paragraph, option, etc.
+  switch (field.type) {
+    case 'radio':
+      return html`
+        <p class="control">
+          <label for=${slug} class="label">
+            ${field.label || field.name}
+          </label>
+          ${field.options.map((opt) => html`
+            <p>
+              <label class=${field.type}>
+                <input
+                  type=${field.type}
+                  name=${slug}
+                  value=${opt.label}
+                  ${field.required ? 'required' : ''}
+                  ${field.value === opt.label ? 'checked' : ''}
+                />
+                ${opt.label}
+              </label>
+            </p>
+          `)}
+          ${field.description ? html`<p class="help">${field.description}</p>` : ''}
+        </p>
+      `
     default:
       return html`
         <p class="control">
@@ -11,7 +33,7 @@ module.exports = (field) => {
             ${field.label || field.name}
           </label>
           <input
-            type="${field.field_type}"
+            type="${field.type}"
             name=${slug}
             id=${slug}
             class="input"
