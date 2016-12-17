@@ -1,7 +1,5 @@
 const xhr = promisify(require('xhr'))
 const qs = require('query-string')
-const parallel = require('run-parallel')
-const series = require('run-series')
 const Cookies = require('js-cookie')
 const GitHub = require('github-api')
 const assoc = require('ramda/src/assoc')
@@ -159,23 +157,27 @@ module.exports = {
     }
   },
   subscriptions: {
-    checkAuthCode: (send, done) => {
+    checkAuthCode: async (send, done) => {
+      const psend = promisify(send)
       const authCodeMatch = window.location.href.match(/\?code=([a-z0-9]*)/)
       if (authCodeMatch) {
         const authCode = authCodeMatch[1]
-        series([
-          (cb) => send('fetchToken', authCode, cb),
-          (cb) => send('fetchUser', cb)
-        ], done)
+        await Promise.all([
+          psend('fetchToken', authCode),
+          psend('fetchUser')
+        ])
+        done()
       }
     },
-    checkCookie: (send, done) => {
+    checkCookie: async (send, done) => {
+      const psend = promisify(send)
       const token = Cookies.get('token')
       if (token) {
-        series([
-          (cb) => send('receiveToken', token, cb),
-          (cb) => send('fetchUser', cb)
-        ], done)
+        await Promise.all([
+          psend('receiveToken', token),
+          psend('fetchUser')
+        ])
+        done()
       }
     }
   }
