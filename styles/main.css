@@ -8,3 +8,8 @@
 .breadcrumbs .crumb + .crumb:before {
   content: "/";
 }
+
+fieldset {
+  border: none;
+  margin-bottom: 10px;
+}

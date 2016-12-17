@@ -23,7 +23,9 @@ module.exports = {
       items: [] // files and folders
     },
     currentFile: {
-      contents: {}
+      content: '',
+      filename: '',
+      data: {}
     },
     schemas: {} // keyed by path
   },
@@ -42,14 +44,8 @@ module.exports = {
       return { currentRepo: newCurrentRepo }
     },
     receiveUser: (state, user) => ({ user }),
-    receiveFile: (state, contents) => {
-      const newCurrentFile = assoc('contents', contents, state.currentFile)
-      return { currentFile: newCurrentFile }
-    },
-    resetFile: (state, data) => {
-      const newCurrentFile = assoc('contents', {}, state.currentFile)
-      return { currentFile: newCurrentFile }
-    },
+    receiveFile: (state, data) => ({ currentFile: data }),
+    resetFile: (state, data) => ({ currentFile: module.exports.state.currentFile }),
     receiveSchema: (state, data) => {
       const { path, schema } = data
       const newSchemas = assoc(path, schema, state.schemas)
@@ -110,9 +106,16 @@ module.exports = {
       send('resetFile', () => {
         const { repoOwner, repoName, path } = data
         const repo = new GitHub({ token: state.token }).getRepo(repoOwner, repoName)
-        repo.getContents(null, path, true, (err, result) => {
+        repo.getContents(null, path, null, (err, result) => {
           if (err) return done(new Error('Failed to fetch file contents'))
-          send('receiveFile', result, done)
+          try {
+            const filename = result.name
+            const content = decode(result.content)
+            const data = JSON.parse(content)
+            send('receiveFile', { data, content, filename }, done)
+          } catch (e) {
+            return done(new Error(`Failed to parse data from file`))
+          }
         })
       })
     },
@@ -183,3 +186,8 @@ function removeUrlProps (rows) {
   })
 }
 
+function decode (content) {
+  // Decode Base64 to UTF-8
+  // https://developer.mozilla.org/en-US/docs/Web/API/window.btoa#Unicode_Strings
+  return window.decodeURIComponent(window.escape(window.atob(content)))
+}

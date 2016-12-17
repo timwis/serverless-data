@@ -25,7 +25,8 @@ module.exports = (state, prev, send) => {
   }
 
   const crumbs = constructCrumbs(repoOwner, repoName, path)
-  const contents = state.currentFile.contents
+  const data = state.currentFile.data
+  const filename = state.currentFile.filename
 
   return html`
     <div class="container">
@@ -34,7 +35,13 @@ module.exports = (state, prev, send) => {
          ${Breadcrumbs(crumbs)}
        </p>
       </nav>
-      ${schema ? Form(schema, contents, submitCb) : ''}
+      <form onsubmit=${onSubmit}>
+        <h2 class="title">${filename}</h2>
+        ${schema ? Fieldset(schema, data) : ''}
+        <p class="control">
+          <button type="submit" class="button is-primary">Submit</button>
+        </p>
+      </form>
     </div>
   `
 
@@ -44,32 +51,25 @@ module.exports = (state, prev, send) => {
             path !== prevPath)
   }
 
-  function submitCb (formData) {
+  function onSubmit (e) {
+    const formData = getFormData(e.target.data)
+    console.log(formData)
     const payload = { repoOwner, repoName, path, formData }
     send('writeFile', payload)
+    e.preventDefault()
   }
 }
 
-function Form (fields, data, submitCb) {
+function Fieldset (fields, data) {
   return html`
-    <form onsubmit=${onSubmit}>
+    <fieldset name="data">
       ${fields.map((field) => {
         const value = data[field.name]
         const fieldWithData = assoc('value', value, field)
         return Field(fieldWithData)
       })}
-      <p class="control">
-        <button type="submit" class="button is-primary">Submit</button>
-      </p>
-    </form>
+    </fieldset>
   `
-  function onSubmit (e) {
-    if (submitCb) {
-      const formData = getFormData(e.target)
-      submitCb(formData)
-    }
-    e.preventDefault()
-  }
 }
 
 function constructCrumbs (repoOwner, repoName, path) {
@@ -79,7 +79,7 @@ function constructCrumbs (repoOwner, repoName, path) {
   ]
 
   if (path) {
-    const pathItems = path.split('/')
+    const pathItems = path.split('/').slice(0, -1) // except filename
     pathItems.forEach((item, index) => {
       // construct the path up to this item
       const itemPath = pathItems.slice(0, index + 1).join('/')
