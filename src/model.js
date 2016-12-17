@@ -1,4 +1,4 @@
-const xhr = require('xhr')
+const xhr = promisify(require('xhr'))
 const qs = require('query-string')
 const parallel = require('run-parallel')
 const series = require('run-series')
@@ -62,7 +62,7 @@ module.exports = {
       const url = config.GITHUB_AUTH_URL + '?' + qs.stringify(params)
       window.location.href = url
     },
-    fetchToken: (state, authCode, send, done) => {
+    _fetchToken: (state, authCode, send, done) => {
       const authURL = `${config.GATEKEEPER_HOST}/authenticate/${authCode}`
 
       xhr(authURL, { json: true }, (err, res, body) => {
@@ -74,26 +74,47 @@ module.exports = {
         ], done)
       })
     },
+    fetchToken: async (state, authCode, send, done) => {
+      const psend = promisify(send)
+      const authURL = `${config.GATEKEEPER_HOST}/authenticate/${authCode}`
+
+      try {
+        const request = await xhr(authURL, { json: true })
+        const token = request.body.token
+        window.history.pushState({}, null, '/') // remove code from URL
+
+        await Promise.all([
+          psend('persistToken', token),
+          psend('receiveToken', token)
+        ])
+      } catch (err) {
+        done(new Error('Failed to retreive token'))
+      }
+    },
     persistToken: (state, token, send, done) => {
       Cookies.set('token', token)
       done()
     },
-    fetchRepos: (state, data, send, done) => {
-      const user = new GitHub({ token: state.token }).getUser()
-      user.listRepos((err, result) => {
-        if (err) return done(new Error('Failed to fetch list of repos'))
-        send('receiveRepos', result, done)
-      })
+    fetchRepos: async (state, data, send, done) => {
+      try {
+        const user = new GitHub({ token: state.token }).getUser()
+        const response = await user.listRepos()
+        send('receiveRepos', response.data, done)
+      } catch (err) {
+        done(new Error('Failed to fetch list of repos'))
+      }
     },
-    fetchRepoItems: (state, data, send, done) => { // files and folders
-      send('resetRepoItems', () => {
+    fetchRepoItems: async (state, data, send, done) => {
+      const psend = promisify(send)
+      try {
+        await psend('resetRepoItems')
         const { repoOwner, repoName, path } = data
         const repo = new GitHub({ token: state.token }).getRepo(repoOwner, repoName)
-        repo.getContents(null, path, null, (err, result) => {
-          if (err) return done(new Error('Failed to fetch repository items'))
-          send('receiveRepoItems', result, done)
-        })
-      })
+        const response = await repo.getContents(null, path, null)
+        send('receiveRepoItems', response.data, done)
+      } catch (err) {
+        done(new Error('Failed to fetch repository items'))
+      }
     },
     fetchUser: (state, data, send, done) => {
       const user = new GitHub({ token: state.token }).getUser()
@@ -190,4 +211,14 @@ function decode (content) {
   // Decode Base64 to UTF-8
   // https://developer.mozilla.org/en-US/docs/Web/API/window.btoa#Unicode_Strings
   return window.decodeURIComponent(window.escape(window.atob(content)))
+}
+
+function promisify (fn) {
+  return function (...args) {
+    return new Promise((resolve, reject) => {
+      fn(...args, (err, result) => {
+        return err ? reject(err) : resolve(result)
+      })
+    })
+  }
 }
