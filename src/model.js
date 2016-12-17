@@ -62,25 +62,13 @@ module.exports = {
       const url = config.GITHUB_AUTH_URL + '?' + qs.stringify(params)
       window.location.href = url
     },
-    _fetchToken: (state, authCode, send, done) => {
-      const authURL = `${config.GATEKEEPER_HOST}/authenticate/${authCode}`
-
-      xhr(authURL, { json: true }, (err, res, body) => {
-        if (err || res.statusCode !== 200) return done(new Error('Failed to retrieve token'))
-        window.history.pushState({}, null, '/') // remove code from URL
-        parallel([
-          (cb) => send('persistToken', body.token, cb),
-          (cb) => send('receiveToken', body.token, cb)
-        ], done)
-      })
-    },
     fetchToken: async (state, authCode, send, done) => {
       const psend = promisify(send)
       const authURL = `${config.GATEKEEPER_HOST}/authenticate/${authCode}`
 
       try {
-        const request = await xhr(authURL, { json: true })
-        const token = request.body.token
+        const response = await xhr(authURL, { json: true })
+        const token = response.body.token
         window.history.pushState({}, null, '/') // remove code from URL
 
         await Promise.all([
@@ -116,46 +104,45 @@ module.exports = {
         done(new Error('Failed to fetch repository items'))
       }
     },
-    fetchUser: (state, data, send, done) => {
-      const user = new GitHub({ token: state.token }).getUser()
-      user.getProfile((err, result) => {
-        if (err) return done(new Error('Failed to fetch user profile'))
-        send('receiveUser', result, done)
-      })
+    fetchUser: async (state, data, send, done) => {
+      try {
+        const user = new GitHub({ token: state.token }).getUser()
+        const response = await user.getProfile()
+        send('receiveUser', response.data, done)
+      } catch (err) {
+        done(new Error('Failed to fetch user profile'))
+      }
     },
-    fetchFile: (state, data, send, done) => {
-      send('resetFile', () => {
+    fetchFile: async (state, data, send, done) => {
+      const psend = promisify(send)
+      try {
+        await psend('resetFile')
         const { repoOwner, repoName, path } = data
         const repo = new GitHub({ token: state.token }).getRepo(repoOwner, repoName)
-        repo.getContents(null, path, null, (err, result) => {
-          if (err) return done(new Error('Failed to fetch file contents'))
-          try {
-            const filename = result.name
-            const content = decode(result.content)
-            const data = JSON.parse(content)
-            send('receiveFile', { data, content, filename }, done)
-          } catch (e) {
-            return done(new Error(`Failed to parse data from file`))
-          }
-        })
-      })
+        const response = await repo.getContents(null, path, false)
+        const filename = response.data.name
+        const content = decode(response.data.content)
+        const fileData = JSON.parse(content)
+        send('receiveFile', { data: fileData, content, filename }, done)
+      } catch (err) {
+        console.error(err)
+        done(new Error('Failed to parse data from file'))
+      }
     },
-    fetchSchema: (state, data, send, done) => {
-      const { repoOwner, repoName, path } = data
-      const schemaPath = pathjoin(path, '_schema.yml')
-      const repo = new GitHub({ token: state.token }).getRepo(repoOwner, repoName)
-      repo.getContents(null, schemaPath, true, (err, result) => {
-        if (err) return done(new Error(`Failed to fetch schema file at ${path}`))
-        try {
-          const schema = yaml.safeLoad(result)
-          const payload = { path, schema }
-          send('receiveSchema', payload, done)
-        } catch (e) {
-          return done(new Error(`Error parsing schema file`))
-        }
-      })
+    fetchSchema: async (state, data, send, done) => {
+      try {
+        const { repoOwner, repoName, path } = data
+        const schemaPath = pathjoin(path, '_schema.yml')
+        const repo = new GitHub({ token: state.token }).getRepo(repoOwner, repoName)
+        const response = await repo.getContents(null, schemaPath, true)
+        const schema = yaml.safeLoad(response.data)
+        const payload = { path, schema }
+        send('receiveSchema', payload, done)
+      } catch (err) {
+        done(new Error('Failed to parse schema file'))
+      }
     },
-    writeFile: (state, data, send, done) => {
+    _writeFile: (state, data, send, done) => {
       const { repoOwner, repoName, path, formData } = data
       const repo = new GitHub({ token: state.token }).getRepo(repoOwner, repoName)
       const fileName = path.split('/').pop()
@@ -169,6 +156,21 @@ module.exports = {
         })
       } catch (e) {
         return done(new Error(`Failed to serialize form data`))
+      }
+    },
+    writeFile: async (state, data, send, done) => {
+      try {
+        const { repoOwner, repoName, path, formData } = data
+        const fileName = path.split('/').pop()
+        const commitMsg = `Updated ${fileName}`
+        const branch = 'master'
+        const content = JSON.stringify(formData, null, 2)
+
+        const repo = new GitHub({ token: state.token }).getRepo(repoOwner, repoName)
+        const response = await repo.writeFile(branch, path, content, commitMsg, {})
+        console.log(response)
+      } catch (err) {
+        done(new Error('Failed to write file'))
       }
     }
   },
