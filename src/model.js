@@ -142,22 +142,6 @@ module.exports = {
         done(new Error('Failed to parse schema file'))
       }
     },
-    _writeFile: (state, data, send, done) => {
-      const { repoOwner, repoName, path, formData } = data
-      const repo = new GitHub({ token: state.token }).getRepo(repoOwner, repoName)
-      const fileName = path.split('/').pop()
-      const commitMsg = `Updated ${fileName}`
-      const branch = 'master'
-      try {
-        const content = JSON.stringify(formData, null, 2)
-        repo.writeFile(branch, path, content, commitMsg, (err, result) => {
-          if (err) return done(new Error(`Failed to write to file`))
-          console.log(result)
-        })
-      } catch (e) {
-        return done(new Error(`Failed to serialize form data`))
-      }
-    },
     writeFile: async (state, data, send, done) => {
       try {
         const { repoOwner, repoName, path, formData } = data
