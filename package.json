@@ -6,7 +6,7 @@
   "author": "timwis <tim@timwis.com>",
   "license": "MIT",
   "scripts": {
-    "start": "budo . --pushstate --live --css styles/main.css --base /"
+    "start": "budo . --pushstate --live --css styles/main.css --base / -- -t babelify"
   },
   "dependencies": {
     "bulma": "^0.2.3",
@@ -23,6 +23,8 @@
     "xhr": "^2.3.1"
   },
   "devDependencies": {
+    "babel-plugin-transform-async-to-generator": "^6.16.0",
+    "babelify": "^7.3.0",
     "budo": "^9.3.0",
     "choo-log": "^3.0.0"
   }

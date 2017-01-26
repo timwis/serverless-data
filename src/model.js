@@ -1,7 +1,5 @@
-const xhr = require('xhr')
+const xhr = promisify(require('xhr'))
 const qs = require('query-string')
-const parallel = require('run-parallel')
-const series = require('run-series')
 const Cookies = require('js-cookie')
 const GitHub = require('github-api')
 const assoc = require('ramda/src/assoc')
@@ -62,113 +60,124 @@ module.exports = {
       const url = config.GITHUB_AUTH_URL + '?' + qs.stringify(params)
       window.location.href = url
     },
-    fetchToken: (state, authCode, send, done) => {
+    fetchToken: async (state, authCode, send, done) => {
+      const psend = promisify(send)
       const authURL = `${config.GATEKEEPER_HOST}/authenticate/${authCode}`
 
-      xhr(authURL, { json: true }, (err, res, body) => {
-        if (err || res.statusCode !== 200) return done(new Error('Failed to retrieve token'))
+      try {
+        const response = await xhr(authURL, { json: true })
+        const token = response.body.token
         window.history.pushState({}, null, '/') // remove code from URL
-        parallel([
-          (cb) => send('persistToken', body.token, cb),
-          (cb) => send('receiveToken', body.token, cb)
-        ], done)
-      })
+
+        await Promise.all([
+          psend('persistToken', token),
+          psend('receiveToken', token)
+        ])
+      } catch (err) {
+        done(new Error('Failed to retreive token'))
+      }
     },
     persistToken: (state, token, send, done) => {
       Cookies.set('token', token)
       done()
     },
-    fetchRepos: (state, data, send, done) => {
-      const user = new GitHub({ token: state.token }).getUser()
-      user.listRepos((err, result) => {
-        if (err) return done(new Error('Failed to fetch list of repos'))
-        send('receiveRepos', result, done)
-      })
-    },
-    fetchRepoItems: (state, data, send, done) => { // files and folders
-      send('resetRepoItems', () => {
-        const { repoOwner, repoName, path } = data
-        const repo = new GitHub({ token: state.token }).getRepo(repoOwner, repoName)
-        repo.getContents(null, path, null, (err, result) => {
-          if (err) return done(new Error('Failed to fetch repository items'))
-          send('receiveRepoItems', result, done)
-        })
-      })
-    },
-    fetchUser: (state, data, send, done) => {
-      const user = new GitHub({ token: state.token }).getUser()
-      user.getProfile((err, result) => {
-        if (err) return done(new Error('Failed to fetch user profile'))
-        send('receiveUser', result, done)
-      })
-    },
-    fetchFile: (state, data, send, done) => {
-      send('resetFile', () => {
-        const { repoOwner, repoName, path } = data
-        const repo = new GitHub({ token: state.token }).getRepo(repoOwner, repoName)
-        repo.getContents(null, path, null, (err, result) => {
-          if (err) return done(new Error('Failed to fetch file contents'))
-          try {
-            const filename = result.name
-            const content = decode(result.content)
-            const data = JSON.parse(content)
-            send('receiveFile', { data, content, filename }, done)
-          } catch (e) {
-            return done(new Error(`Failed to parse data from file`))
-          }
-        })
-      })
-    },
-    fetchSchema: (state, data, send, done) => {
-      const { repoOwner, repoName, path } = data
-      const schemaPath = pathjoin(path, '_schema.yml')
-      const repo = new GitHub({ token: state.token }).getRepo(repoOwner, repoName)
-      repo.getContents(null, schemaPath, true, (err, result) => {
-        if (err) return done(new Error(`Failed to fetch schema file at ${path}`))
-        try {
-          const schema = yaml.safeLoad(result)
-          const payload = { path, schema }
-          send('receiveSchema', payload, done)
-        } catch (e) {
-          return done(new Error(`Error parsing schema file`))
-        }
-      })
-    },
-    writeFile: (state, data, send, done) => {
-      const { repoOwner, repoName, path, formData } = data
-      const repo = new GitHub({ token: state.token }).getRepo(repoOwner, repoName)
-      const fileName = path.split('/').pop()
-      const commitMsg = `Updated ${fileName}`
-      const branch = 'master'
+    fetchRepos: async (state, data, send, done) => {
       try {
+        const user = new GitHub({ token: state.token }).getUser()
+        const response = await user.listRepos()
+        send('receiveRepos', response.data, done)
+      } catch (err) {
+        done(new Error('Failed to fetch list of repos'))
+      }
+    },
+    fetchRepoItems: async (state, data, send, done) => {
+      const psend = promisify(send)
+      try {
+        await psend('resetRepoItems')
+        const { repoOwner, repoName, path } = data
+        const repo = new GitHub({ token: state.token }).getRepo(repoOwner, repoName)
+        const response = await repo.getContents(null, path, null)
+        send('receiveRepoItems', response.data, done)
+      } catch (err) {
+        done(new Error('Failed to fetch repository items'))
+      }
+    },
+    fetchUser: async (state, data, send, done) => {
+      try {
+        const user = new GitHub({ token: state.token }).getUser()
+        const response = await user.getProfile()
+        send('receiveUser', response.data, done)
+      } catch (err) {
+        done(new Error('Failed to fetch user profile'))
+      }
+    },
+    fetchFile: async (state, data, send, done) => {
+      const psend = promisify(send)
+      try {
+        await psend('resetFile')
+        const { repoOwner, repoName, path } = data
+        const repo = new GitHub({ token: state.token }).getRepo(repoOwner, repoName)
+        const response = await repo.getContents(null, path, false)
+        const filename = response.data.name
+        const content = decode(response.data.content)
+        const fileData = JSON.parse(content)
+        send('receiveFile', { data: fileData, content, filename }, done)
+      } catch (err) {
+        console.error(err)
+        done(new Error('Failed to parse data from file'))
+      }
+    },
+    fetchSchema: async (state, data, send, done) => {
+      try {
+        const { repoOwner, repoName, path } = data
+        const schemaPath = pathjoin(path, '_schema.yml')
+        const repo = new GitHub({ token: state.token }).getRepo(repoOwner, repoName)
+        const response = await repo.getContents(null, schemaPath, true)
+        const schema = yaml.safeLoad(response.data)
+        const payload = { path, schema }
+        send('receiveSchema', payload, done)
+      } catch (err) {
+        done(new Error('Failed to parse schema file'))
+      }
+    },
+    writeFile: async (state, data, send, done) => {
+      try {
+        const { repoOwner, repoName, path, formData } = data
+        const fileName = path.split('/').pop()
+        const commitMsg = `Updated ${fileName}`
+        const branch = 'master'
         const content = JSON.stringify(formData, null, 2)
-        repo.writeFile(branch, path, content, commitMsg, (err, result) => {
-          if (err) return done(new Error(`Failed to write to file`))
-          console.log(result)
-        })
-      } catch (e) {
-        return done(new Error(`Failed to serialize form data`))
+
+        const repo = new GitHub({ token: state.token }).getRepo(repoOwner, repoName)
+        const response = await repo.writeFile(branch, path, content, commitMsg, {})
+        console.log(response)
+      } catch (err) {
+        done(new Error('Failed to write file'))
       }
     }
   },
   subscriptions: {
-    checkAuthCode: (send, done) => {
+    checkAuthCode: async (send, done) => {
+      const psend = promisify(send)
       const authCodeMatch = window.location.href.match(/\?code=([a-z0-9]*)/)
       if (authCodeMatch) {
         const authCode = authCodeMatch[1]
-        series([
-          (cb) => send('fetchToken', authCode, cb),
-          (cb) => send('fetchUser', cb)
-        ], done)
+        await Promise.all([
+          psend('fetchToken', authCode),
+          psend('fetchUser')
+        ])
+        done()
       }
     },
-    checkCookie: (send, done) => {
+    checkCookie: async (send, done) => {
+      const psend = promisify(send)
       const token = Cookies.get('token')
       if (token) {
-        series([
-          (cb) => send('receiveToken', token, cb),
-          (cb) => send('fetchUser', cb)
-        ], done)
+        await Promise.all([
+          psend('receiveToken', token),
+          psend('fetchUser')
+        ])
+        done()
       }
     }
   }
@@ -190,4 +199,14 @@ function decode (content) {
   // Decode Base64 to UTF-8
   // https://developer.mozilla.org/en-US/docs/Web/API/window.btoa#Unicode_Strings
   return window.decodeURIComponent(window.escape(window.atob(content)))
+}
+
+function promisify (fn) {
+  return function (...args) {
+    return new Promise((resolve, reject) => {
+      fn(...args, (err, result) => {
+        return err ? reject(err) : resolve(result)
+      })
+    })
+  }
 }
